@@ -1,3 +1,6 @@
+mod bencode;
+mod torrent;
+
 fn main() {
-    println!("Hello, world!");
+    println!("bittorrent-client: bencode + torrent modules loaded.");
 }
