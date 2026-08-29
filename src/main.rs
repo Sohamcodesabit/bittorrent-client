@@ -3,7 +3,8 @@ mod torrent;
 mod peer;
 mod network;
 mod download;
+mod seed;
 
 fn main() {
-    println!("bittorrent-client: bencode + torrent + peer + network + download modules loaded.");
+    println!("bittorrent-client: all modules loaded (bencode, torrent, peer, network, download, seed).");
 }
