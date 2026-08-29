@@ -57,7 +57,7 @@ pub fn split_into_blocks(piece_length: u32) -> Vec<(u32, u32)> {
 /// Note: this is deliberately simple for a first pass -- it silently drops
 /// any Bitfield/Have info rather than tracking peer piece availability.
 /// We'll want to change that once we're choosing pieces from many peers.
-async fn wait_for_unchoke(stream: &mut TcpStream) -> Result<(), DownloadError> {
+pub(crate) async fn wait_for_unchoke(stream: &mut TcpStream) -> Result<(), DownloadError> {
     send_message(stream, &PeerMessage::Interested).await.map_err(DownloadError::Io)?;
 
     loop {
@@ -82,7 +82,7 @@ async fn wait_for_unchoke(stream: &mut TcpStream) -> Result<(), DownloadError> {
 /// been unchoked (see `download_piece` below for the common single-piece
 /// case, and `download_pieces` for reusing one connection across several
 /// pieces without repeating the interested/unchoke ritual each time).
-async fn download_piece_data(
+pub(crate) async fn download_piece_data(
     stream: &mut TcpStream,
     piece_index: u32,
     piece_length: u32,

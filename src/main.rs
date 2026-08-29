@@ -52,9 +52,10 @@ enum Command {
         /// Path to the .torrent describing what to download.
         #[arg(long)]
         torrent: PathBuf,
-        /// Where to write the downloaded file.
-        #[arg(long)]
-        output: PathBuf,
+        /// Directory to save the downloaded file into -- the file keeps
+        /// the name embedded in the .torrent, you just choose where it lands.
+        #[arg(long, default_value = ".")]
+        output_dir: PathBuf,
         /// Comma-separated peer addresses, e.g. 192.168.1.10:6881,192.168.1.11:6881
         #[arg(long, value_delimiter = ',')]
         peers: Vec<String>,
@@ -74,12 +75,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let parsed = torrent::parse(&bytes)?;
             orchestrate::run_seed(&parsed, file, port).await?;
         }
-        Command::Leech { torrent, output, peers } => {
+        Command::Leech { torrent, output_dir, peers } => {
             let bytes = std::fs::read(&torrent)?;
             let parsed = torrent::parse(&bytes)?;
+            let output_path = output_dir.join(&parsed.name);
             let peer_addrs: Vec<SocketAddr> =
                 peers.iter().map(|s| s.parse()).collect::<Result<_, _>>()?;
-            orchestrate::run_leech(&parsed, output, peer_addrs).await?;
+            orchestrate::run_leech(&parsed, output_path, peer_addrs).await?;
         }
     }
 
