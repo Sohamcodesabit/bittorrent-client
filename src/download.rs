@@ -78,21 +78,16 @@ async fn wait_for_unchoke(stream: &mut TcpStream) -> Result<(), DownloadError> {
     }
 }
 
-/// Downloads a single piece from an already-handshaken peer connection,
-/// verifies it against `expected_hash`, and returns the raw piece bytes.
-///
-/// This requests all of a piece's blocks up front (a simple "pipeline") so
-/// we don't pay a full round-trip latency cost per 16 KiB block -- a real
-/// client would tune how many requests are kept in flight, but sending
-/// them all is fine for a single piece from a single peer.
-pub async fn download_piece(
+/// Downloads a single piece's raw bytes over a connection that has ALREADY
+/// been unchoked (see `download_piece` below for the common single-piece
+/// case, and `download_pieces` for reusing one connection across several
+/// pieces without repeating the interested/unchoke ritual each time).
+async fn download_piece_data(
     stream: &mut TcpStream,
     piece_index: u32,
     piece_length: u32,
     expected_hash: [u8; 20],
 ) -> Result<Vec<u8>, DownloadError> {
-    wait_for_unchoke(stream).await?;
-
     let blocks = split_into_blocks(piece_length);
 
     for &(begin, length) in &blocks {
@@ -139,6 +134,46 @@ pub async fn download_piece(
     }
 
     Ok(piece_buf)
+}
+
+/// Downloads a single piece from an already-handshaken peer connection,
+/// verifies it against `expected_hash`, and returns the raw piece bytes.
+/// Waits for Unchoke first -- use `download_pieces` instead when you'll be
+/// downloading more than one piece over the same connection, so you only
+/// pay the interested/unchoke round trip once.
+pub async fn download_piece(
+    stream: &mut TcpStream,
+    piece_index: u32,
+    piece_length: u32,
+    expected_hash: [u8; 20],
+) -> Result<Vec<u8>, DownloadError> {
+    wait_for_unchoke(stream).await?;
+    download_piece_data(stream, piece_index, piece_length, expected_hash).await
+}
+
+/// Downloads several pieces over one connection, sending Interested and
+/// waiting for Unchoke only once up front. `assignments` is a list of
+/// (piece_index, piece_length, expected_hash) -- piece_length is passed
+/// per-piece because the final piece of a torrent is usually shorter than
+/// the rest. Stops and returns an error on the first piece that fails
+/// (I/O error or hash mismatch); pieces already downloaded successfully
+/// are returned alongside the error via the Err variant's data... actually,
+/// for simplicity this returns only completed pieces on success and bails
+/// out entirely on the first failure, leaving retry/reassignment to the
+/// caller (e.g. the orchestration layer can hand a failed piece to a
+/// different peer).
+pub async fn download_pieces(
+    stream: &mut TcpStream,
+    assignments: &[(u32, u32, [u8; 20])],
+) -> Result<Vec<(u32, Vec<u8>)>, DownloadError> {
+    wait_for_unchoke(stream).await?;
+
+    let mut results = Vec::with_capacity(assignments.len());
+    for &(piece_index, piece_length, expected_hash) in assignments {
+        let data = download_piece_data(stream, piece_index, piece_length, expected_hash).await?;
+        results.push((piece_index, data));
+    }
+    Ok(results)
 }
 
 /// Writes a verified piece's bytes to `path` at the correct byte offset
